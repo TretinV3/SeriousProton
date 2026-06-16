@@ -238,6 +238,16 @@ public:
     DataBuffer& operator <<(double data) { write(data); return *this; }
     DataBuffer& operator <<(std::string_view data) { write(data); return *this; }
 
+    // EM FIXME
+    DataBuffer& operator <<(size_t data) { write(data); return *this; }
+    DataBuffer& operator >>(size_t& data) {
+        uint32_t d;
+        read(d);
+        data = d;
+        return *this;
+    }
+
+
     DataBuffer& operator >>(bool& data) { read(data); return *this; }
     DataBuffer& operator >>(int8_t& data) { read(data); return *this; }
     DataBuffer& operator >>(uint8_t& data) { read(data); return *this; }
