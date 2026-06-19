@@ -5,6 +5,7 @@
 #include "stringImproved.h"
 #include "ecs/system.h"
 #include "P.h"
+#include "timer.h"
 
 #ifdef WIN32
 #include "dynamicLibrary.h"
@@ -26,6 +27,8 @@ private:
     std::unordered_map<string, P<PObject> > objectMap;
     float elapsedTime;
     float gameSpeed;
+
+    sp::SystemStopwatch frame_timer;
     
     EngineTiming last_engine_timing;
 #ifdef WIN32
@@ -43,7 +46,10 @@ public:
 
     void registerObject(string name, P<PObject> obj);
     P<PObject> getObject(string name);
-    
+
+    bool iterMainLoopHeadless();
+    bool iterMainLoop();
+
     template<class T> void registerSystem() {
         systems.push_back(new T());
     }

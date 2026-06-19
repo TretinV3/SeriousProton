@@ -1,5 +1,7 @@
 #include "windowManager.h"
 
+#include "nlohmann/json.hpp"
+
 #ifdef WIN32
 #include "dynamicLibrary.h"
 
@@ -34,6 +36,7 @@ void* Window::gl_context = nullptr;
 Window::Window(glm::vec2 virtual_size, Mode mode, RenderChain* render_chain, int fsaa)
 : minimal_virtual_size(virtual_size), current_virtual_size(virtual_size), render_chain(render_chain), mode(mode), fsaa(fsaa)
 {
+    LOG(INFO, "Debug Window 1");
     srand(static_cast<int32_t>(time(nullptr)));
 
 #ifdef _WIN32
@@ -48,7 +51,10 @@ Window::Window(glm::vec2 virtual_size, Mode mode, RenderChain* render_chain, int
 #endif
 
     create();
+    LOG(INFO, "Debug Window 2");
+
     sp::initOpenGL();
+    LOG(INFO, "Debug Window 3");
 
     all_windows.push_back(this);
 }
@@ -141,18 +147,24 @@ glm::ivec2 Window::mapCoordsToPixel(const glm::vec2 point) const
 
 void Window::create()
 {
+    LOG(INFO, "Debug Create 1");
     if (window) return;
+    LOG(INFO, "Debug Create 2");
 
     int display_nr = 0;
+    LOG(INFO, "Debug Create 3");
     for(auto w : all_windows)
     {
+        LOG(INFO, "Debug Create in");
         if (w == this)
             break;
         display_nr ++;
     }
+    LOG(INFO, "Debug Create 4");
 
     // Create the window of the application
     auto size = calculateWindowSize();
+    LOG(INFO, "Debug Create 5");
 
 #if defined(ANDROID)
     auto context_profile_mask = SDL_GL_CONTEXT_PROFILE_ES;
@@ -170,6 +182,7 @@ void Window::create()
         context_profile_mask = SDL_GL_CONTEXT_PROFILE_CORE;
     else if (getFromEnvironment("SP_GL_PROFILE", "") == "COMPAT")
         context_profile_mask = SDL_GL_CONTEXT_PROFILE_COMPATIBILITY;
+    LOG(INFO, "Debug Create 6");
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, context_profile_mask);
 #if defined(DEBUG)
@@ -180,6 +193,7 @@ void Window::create()
     SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    LOG(INFO, "Debug Create 7");
 
     int flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
     switch(mode)
@@ -193,11 +207,17 @@ void Window::create()
         flags |= SDL_WINDOW_FULLSCREEN;
         break;
     }
+    LOG(INFO, "Debug Create 8");
+
     window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED_DISPLAY(display_nr), SDL_WINDOWPOS_CENTERED_DISPLAY(display_nr), size.x, size.y, flags);
+    LOG(INFO, "Debug Create 9");
+
     if (!window) {
         LOG(Error, "Failed to create SDL2 window:", SDL_GetError());
         exit(1);
     }
+    LOG(INFO, "Debug Create 10");
+
     if (!gl_context) {
         gl_context = SDL_GL_CreateContext(static_cast<SDL_Window*>(window));
         if (!gl_context) {
@@ -215,9 +235,15 @@ void Window::create()
             exit(1);
         }
     }
+    LOG(INFO, "Debug Create 11");
+
     if (SDL_GL_SetSwapInterval(-1))
         SDL_GL_SetSwapInterval(1);
     setupView();
+    LOG(INFO, "Debug Create 12");
+
+    LOG(INFO, "Debug Create 13");
+
 }
 
 void Window::handleEvent(const SDL_Event& event)
@@ -443,6 +469,7 @@ glm::ivec2 Window::calculateWindowSize() const
     auto windowWidth = static_cast<int>(minimal_virtual_size.x);
     auto windowHeight = static_cast<int>(minimal_virtual_size.y);
 
+
     SDL_Rect rect{0,0,0,0};
     if (SDL_GetDisplayBounds(display_nr, &rect))
     {
@@ -455,15 +482,34 @@ glm::ivec2 Window::calculateWindowSize() const
     }
 
     int scale = 2;
-    while(windowWidth * scale < int(rect.w) && windowHeight * scale < int(rect.h))
-        scale += 1;
+    // print rect
+    // TODO EMFIXME
+    LOG(INFO, "scale ", scale);
+    LOG(INFO, "windowWidth ", windowWidth);
+    LOG(INFO, "windowHeight ", windowHeight);
+    LOG(INFO, "w ", rect.w);
+    LOG(INFO, "h ", rect.h);
+    // while(windowWidth * scale < int(rect.w) && windowHeight * scale < int(rect.h)) {
+    //     scale += 1;
+    //     LOG(INFO, "scale ", scale);
+    // }
     windowWidth *= scale - 1;
     windowHeight *= scale - 1;
 
-    while(windowWidth >= int(rect.w) || windowHeight >= int(rect.h) - 100)
-    {
-        windowWidth = static_cast<int>(std::floor(windowWidth * 0.9f));
-        windowHeight = static_cast<int>(std::floor(windowHeight * 0.9f));
-    }
+    LOG(INFO, "scale ", scale);
+    LOG(INFO, "windowWidth ", windowWidth);
+    LOG(INFO, "windowHeight", windowHeight);
+    LOG(INFO, "w", rect.w);
+    LOG(INFO, "h", rect.h);
+    // while(windowWidth >= int(rect.w) || windowHeight >= int(rect.h) - 100)
+    // {
+    //     LOG(INFO, "scale", scale);
+    //     LOG(INFO, "windowWidth", windowWidth);
+    //     LOG(INFO, "windowHeight", windowHeight);
+    //     LOG(INFO, "w", rect.w);
+    //     LOG(INFO, "h", rect.h);
+    //     windowWidth = static_cast<int>(std::floor(windowWidth * 0.9f));
+    //     windowHeight = static_cast<int>(std::floor(windowHeight * 0.9f));
+    // }
     return {windowWidth, windowHeight};
 }
