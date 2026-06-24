@@ -267,10 +267,59 @@ void GameServer::update(float /*gameDelta*/)
 
     for(unsigned int n=0; n<clientList.size(); n++)
     {
+//#ifndef __EMSCRIPTEN__
         sp::io::DataBuffer packet;
-        while(clientList[n].socket && clientList[n].socket->receive(packet))
+        while(clientList[n].socket && clientList[n].socket->receive(packet)) {
+            processDataClient(n, packet);
+        }
+//#endif
+        if (clientList[n].socket != NULL) {
+            clientList[n].socket->sendSendQueue();
+        }
+        if (clientList[n].socket == NULL || clientList[n].socket->getState() == sp::io::network::StreamSocket::State::Closed)
         {
-            switch(clientList[n].receive_state)
+            if (clientList[n].socket)
+            {
+                for(auto id : clientList[n].proxy_ids)
+                    onDisconnectClient(id);
+                onDisconnectClient(clientList[n].client_id);
+            }
+            clientList.erase(clientList.begin() + n);
+            n--;
+        }
+    }
+
+    
+    if (keep_alive_send_timer.isExpired())
+    {
+        keepAliveAll();
+    }
+
+    float dataPerSecond = float(sendDataCounter) / delta;
+    sendDataRate = sendDataRate * (1.f - delta) + dataPerSecond * delta;
+    dataPerSecond = float(sendDataCounterPerClient) / delta;
+    sendDataRatePerClient = sendDataRatePerClient * (1.f - delta) + dataPerSecond * delta;
+
+#if MULTIPLAYER_COLLECT_DATA_STATS
+    if (multiplayer_stats_dump.isExpired())
+    {
+        int total = 0;
+        for(std::unordered_map<string, int >::iterator i=multiplayer_stats.begin(); i != multiplayer_stats.end(); i++)
+            total += i->second;
+        printf("---------------------------------Total: %d\n", total);
+        for(std::unordered_map<string, int >::iterator i=multiplayer_stats.begin(); i != multiplayer_stats.end(); i++)
+        {
+            printf("%60s: %d (%d%%)\n", i->first.c_str(), i->second, i->second * 100 / total);
+        }
+        multiplayer_stats.clear();
+    }
+#endif
+    update_run_time = update_run_time_clock.get();
+}
+
+void GameServer::processDataClient(size_t n, sp::io::DataBuffer& packet) {
+
+    switch(clientList[n].receive_state)
             {
             case CRS_Auth:
                 {
@@ -442,50 +491,25 @@ void GameServer::update(float /*gameDelta*/)
                 clientList[n].receive_state = CRS_Main;
                 break;
             }
-        }
-        if (clientList[n].socket != NULL) {
-            clientList[n].socket->sendSendQueue();
-        }
-        if (clientList[n].socket == NULL || clientList[n].socket->getState() == sp::io::network::StreamSocket::State::Closed)
-        {
-            if (clientList[n].socket)
-            {
-                for(auto id : clientList[n].proxy_ids)
-                    onDisconnectClient(id);
-                onDisconnectClient(clientList[n].client_id);
-            }
-            clientList.erase(clientList.begin() + n);
-            n--;
-        }
-    }
-
-    
-    if (keep_alive_send_timer.isExpired())
-    {
-        keepAliveAll();
-    }
-
-    float dataPerSecond = float(sendDataCounter) / delta;
-    sendDataRate = sendDataRate * (1.f - delta) + dataPerSecond * delta;
-    dataPerSecond = float(sendDataCounterPerClient) / delta;
-    sendDataRatePerClient = sendDataRatePerClient * (1.f - delta) + dataPerSecond * delta;
-
-#if MULTIPLAYER_COLLECT_DATA_STATS
-    if (multiplayer_stats_dump.isExpired())
-    {
-        int total = 0;
-        for(std::unordered_map<string, int >::iterator i=multiplayer_stats.begin(); i != multiplayer_stats.end(); i++)
-            total += i->second;
-        printf("---------------------------------Total: %d\n", total);
-        for(std::unordered_map<string, int >::iterator i=multiplayer_stats.begin(); i != multiplayer_stats.end(); i++)
-        {
-            printf("%60s: %d (%d%%)\n", i->first.c_str(), i->second, i->second * 100 / total);
-        }
-        multiplayer_stats.clear();
-    }
-#endif
-    update_run_time = update_run_time_clock.get();
 }
+#ifndef __EMSCRIPTEN__
+size_t GameServer::findClientIndex(int id) {
+    for (size_t i = 0; i < clientList.size(); i++) {
+        if (clientList[i].socket->id == id)
+            return i;
+    }
+    return -1;
+}
+#else
+size_t GameServer::findClientIndex(int id) {
+    for (size_t i = 0; i < clientList.size(); i++) {
+        if (clientList[i].socket->id == id)
+            return i;
+    }
+    return -1;
+}
+#endif
+
 
 void GameServer::replicateInitialData(std::function<void(sp::io::DataBuffer&)> send_packet)
 {
@@ -589,7 +613,7 @@ void GameServer::handleBroadcastUDPSocket(float delta)
     }
 }
 
-void GameServer::newClientConnection(std::unique_ptr<sp::io::network::StreamSocket> socket)
+int32_t GameServer::newClientConnection(std::unique_ptr<sp::io::network::StreamSocket> socket)
 {
     ClientInfo info;
     info.socket = std::move(socket);
@@ -603,6 +627,7 @@ void GameServer::newClientConnection(std::unique_ptr<sp::io::network::StreamSock
     }
     LOG(INFO) << "New connection: " << info.client_id << " waiting for authentication";
     clientList.push_back(std::move(info));
+    return info.client_id;
 }
 
 void GameServer::registerObject(P<MultiplayerObject> obj)

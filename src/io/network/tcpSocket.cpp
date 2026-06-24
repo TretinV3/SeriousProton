@@ -155,6 +155,7 @@ TcpSocket::~TcpSocket()
 {
     close();
 }
+#ifndef __EMSCRIPTEN__
 
 bool TcpSocket::connect(const Address& host, int port)
 {
@@ -322,6 +323,67 @@ size_t TcpSocket::_receive(void* data, size_t size)
     }
     return result;
 }
+#else
+
+extern "C" {
+    extern void js_websocket_connect(string host, int port);
+    extern void js_websocket_close();
+    extern int js_websocket_state(int id);
+    extern void js_websocket_send(int id, const int8_t* data, int size);
+    extern size_t js_websocket_receive(int id, void* data, size_t size);
+}
+
+
+bool TcpSocket::connect(const Address& host, int port)
+{
+
+    js_websocket_connect(host.getHumanReadable()[0], port);
+
+    return true;
+}
+
+bool TcpSocket::connectSSL(const Address& host, int port)
+{
+    return connect(host, port);
+}
+
+void TcpSocket::setDelay(bool delay)
+{
+
+}
+
+void TcpSocket::close()
+{
+    js_websocket_close();
+}
+
+StreamSocket::State TcpSocket::getState()
+{
+    // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/readyState#value
+    int status = js_websocket_state(id);
+    switch (status) {
+        case 0:
+            return StreamSocket::State::Connecting;
+        case 1:
+            return StreamSocket::State::Connected;
+        case 3:
+            return StreamSocket::State::Closed;
+    }
+    return StreamSocket::State::Connected;
+}
+
+size_t TcpSocket::_send(const void* data, size_t size)
+{
+    //std::string s = static_cast<const char*>(data);
+    js_websocket_send(this->id, static_cast<const int8_t*>(data), static_cast<int>(size));
+    return size;
+}
+
+size_t TcpSocket::_receive(void* data, size_t size)
+{
+    return js_websocket_receive(id, data, size);
+}
+#endif
 
 }//namespace network
 }//namespace io

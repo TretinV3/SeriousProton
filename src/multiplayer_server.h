@@ -103,6 +103,8 @@ public:
     virtual void destroy() override;
 
     P<MultiplayerObject> getObjectById(int32_t id);
+
+
     virtual void update(float delta) override;
     inline float getSendDataRate() { return sendDataRate; }
     inline float getSendDataRatePerClient() { return sendDataRatePerClient; }
@@ -120,8 +122,9 @@ public:
     void gotAudioPacket(int32_t client_id, const unsigned char* packet, int packet_size);
     void stopAudio(int32_t client_id);
     void sendAudioPacketFrom(int32_t client_id, sp::io::DataBuffer& packet);
+
+    int32_t newClientConnection(std::unique_ptr<sp::io::network::StreamSocket> socket);
 private:
-    void newClientConnection(std::unique_ptr<sp::io::network::StreamSocket> socket);
     void registerObject(P<MultiplayerObject> obj);
     void broadcastServerCommandFromObject(int32_t id, sp::io::DataBuffer& packet);
     void keepAliveAll();
@@ -143,6 +146,9 @@ public:
     virtual void onNewClient(int32_t client_id) {}
     virtual void onDisconnectClient(int32_t client_id) {}
     virtual std::unordered_set<int32_t> onVoiceChat(int32_t client_id, int32_t target_identifier);
+    void processDataClient(size_t n, sp::io::DataBuffer &packet);
+
+    size_t findClientIndex(int id);
 };
 
 #endif//MULTIPLAYER_SERVER_H

@@ -69,6 +69,8 @@ public:
     P<MultiplayerObject> getObjectById(int32_t id);
     virtual void update(float delta) override;
 
+    void processPacket(sp::io::DataBuffer &packet, sp::io::DataBuffer &reply);
+
     int32_t getClientId() { return client_id; }
     Status getStatus() { return status; }
     DisconnectReason getDisconnectReason() const { return disconnect_reason; }

@@ -133,6 +133,11 @@ Engine::Engine()
     running = true;
     elapsedTime = 0.0f;
     soundManager = new SoundManager();
+
+#ifdef __EMSCRIPTEN__
+    audio_started = false;
+#endif
+
 }
 
 Engine::~Engine()
@@ -288,13 +293,12 @@ void Engine::runMainLoop()
         // pass pointer to this instance (not *this)
         emscripten_set_main_loop_arg(emscripten_iter_main_loop_headless, this, 0, 1);
 #else
-        // while(running)
-        // {
-        //     iterMainLoopHeadless();
-        // }
+        while(running)
+        {
+            iterMainLoopHeadless();
+        }
 #endif
     } else {
-        //sp::audio::Source::startAudioSystem();
 #ifdef DEBUG
         sp::SystemTimer debug_output_timer;
         debug_output_timer.repeat(5);
@@ -303,10 +307,12 @@ void Engine::runMainLoop()
         LOG(Info, "EMSCRIPTEN");
         emscripten_set_main_loop_arg(emscripten_iter_main_loop, this, 0, 1);
 #else
-        // while(running)
-        // {
-        //     iterMainLoop();
-        // }
+        sp::audio::Source::startAudioSystem();
+
+        while(running)
+        {
+            iterMainLoop();
+        }
 
         soundManager->stopMusic();
         sp::audio::Source::stopAudioSystem();
@@ -371,11 +377,12 @@ void Engine::handleEvent(SDL_Event& event)
     case SDL_MOUSEBUTTONDOWN:
 #ifdef __EMSCRIPTEN__
         // EM FIXME
-        // if (!audio_started)
-        // {
-        //     audio::AudioSource::startAudioSystem();
-        //     audio_started = true;
-        // }
+        if (!audio_started)
+        {
+            SDL_InitSubSystem(SDL_INIT_AUDIO);
+            sp::audio::Source::startAudioSystem();
+            audio_started = true;
+        }
 #endif
     case SDL_MOUSEBUTTONUP:
         window_id = event.button.windowID;

@@ -164,6 +164,7 @@ void Server::broadcastToWebsockets(const string& url, const string& data)
     }
 }
 
+// #ifndef __EMSCRIPTEN__
 void Server::handlerThread()
 {
     sp::io::network::Selector selector;
@@ -206,6 +207,9 @@ void Server::handlerThread()
         }
     }
 }
+// #else
+//     void Server::handlerThread() { }
+// #endif
 
 void Server::update(float delta)
 {

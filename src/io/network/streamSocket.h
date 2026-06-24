@@ -34,6 +34,13 @@ public:
     //Returns true if there is still data in the queue after sending
     bool sendSendQueue();
 
+#ifdef __EMSCRIPTEN__
+    void setId(uint64_t id);
+
+    uint64_t id;
+#endif
+
+
 protected:
     void clearQueue();
 
@@ -45,6 +52,8 @@ private:
     bool receive_packet_size_done{false};
     std::vector<uint8_t> receive_buffer;
     size_t received_size{0};
+
+
 };
 
 }//namespace network

@@ -119,6 +119,13 @@ bool StreamSocket::sendSendQueue()
     return send_queue.size() > 0;
 }
 
+#ifdef __EMSCRIPTEN__
+    void StreamSocket::setId(uint64_t id) {
+        this->id = id;
+    }
+#endif
+
+
 void StreamSocket::clearQueue()
 {
     send_queue.clear();

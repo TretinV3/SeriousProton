@@ -23,7 +23,11 @@ public:
     
 private:
     bool running;
-    
+
+#ifdef __EMSCRIPTEN__
+    bool audio_started;
+#endif
+
     std::unordered_map<string, P<PObject> > objectMap;
     float elapsedTime;
     float gameSpeed;

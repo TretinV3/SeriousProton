@@ -93,11 +93,35 @@ void GameClient::update(float /*delta*/)
     for(unsigned int n=0; n<delList.size(); n++)
         objectMap.erase(delList[n]);
 
+// #ifndef __EMSCRIPTEN__
     sp::io::DataBuffer reply;
     sp::io::DataBuffer packet;
     while(socket->receive(packet))
     {
-        no_data_timeout.start(no_data_disconnect_time);
+        processPacket(packet, reply);
+    }
+// #endif
+
+
+    if (status == Connected && heartbeat_timer.isExpired())
+    {
+        heartbeat_timer.start(heartbeat_time);
+        sp::io::DataBuffer ping;
+        ping << CMD_ALIVE;
+        socket->send(ping);
+    }
+
+    if (socket->getState() == sp::io::network::StreamSocket::State::Closed || no_data_timeout.isExpired())
+    {
+        if (disconnect_reason == DisconnectReason::None)
+            disconnect_reason = socket->getState() != sp::io::network::StreamSocket::State::Closed ? DisconnectReason::TimedOut : DisconnectReason::ClosedByServer;
+        socket->close();
+        status = Disconnected;
+    }
+}
+
+void GameClient::processPacket(sp::io::DataBuffer &packet, sp::io::DataBuffer &reply) {
+    no_data_timeout.start(no_data_disconnect_time);
         heartbeat_timer.start(heartbeat_time);
 
         command_t command;
@@ -318,23 +342,6 @@ void GameClient::update(float /*delta*/)
         case Disconnected:
             break;
         }
-    }
-
-    if (status == Connected && heartbeat_timer.isExpired())
-    {
-        heartbeat_timer.start(heartbeat_time);
-        sp::io::DataBuffer ping;
-        ping << CMD_ALIVE;
-        socket->send(ping);
-    }
-
-    if (socket->getState() == sp::io::network::StreamSocket::State::Closed || no_data_timeout.isExpired())
-    {
-        if (disconnect_reason == DisconnectReason::None)
-            disconnect_reason = socket->getState() != sp::io::network::StreamSocket::State::Closed ? DisconnectReason::TimedOut : DisconnectReason::ClosedByServer;
-        socket->close();
-        status = Disconnected;
-    }
 }
 
 void GameClient::sendPacket(sp::io::DataBuffer& packet)

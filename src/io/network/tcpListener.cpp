@@ -29,8 +29,11 @@ TcpListener::~TcpListener()
     close();
 }
 
+#ifndef __EMSCRIPTEN__
 bool TcpListener::listen(int port)
 {
+
+
     initSocketLib();
     if (isListening())
         close();
@@ -121,6 +124,35 @@ bool TcpListener::accept(TcpSocket& socket)
     socket.setBlocking(socket.blocking);
     return true;
 }
+#else
+
+extern "C" {
+extern bool js_websocket_listen();
+extern void js_websocket_close();
+}
+
+bool TcpListener::listen(int port)
+{
+    return js_websocket_listen();
+}
+
+void TcpListener::close()
+{
+    js_websocket_close();
+}
+
+bool TcpListener::isListening()
+{
+    return true;
+}
+
+bool TcpListener::accept(TcpSocket& socket)
+{
+    //throw "Not implemented";
+    return false;
+}
+
+#endif
 
 }//namespace network
 }//namespace io

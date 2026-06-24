@@ -238,6 +238,7 @@ public:
     DataBuffer& operator <<(double data) { write(data); return *this; }
     DataBuffer& operator <<(std::string_view data) { write(data); return *this; }
 
+#ifdef __EMSCRIPTEN__
     // EM FIXME
     DataBuffer& operator <<(size_t data) { write(data); return *this; }
     DataBuffer& operator >>(size_t& data) {
@@ -246,6 +247,8 @@ public:
         data = d;
         return *this;
     }
+#endif
+
 
 
     DataBuffer& operator >>(bool& data) { read(data); return *this; }
