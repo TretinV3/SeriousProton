@@ -492,15 +492,7 @@ void GameServer::processDataClient(size_t n, sp::io::DataBuffer& packet) {
                 break;
             }
 }
-#ifndef __EMSCRIPTEN__
-size_t GameServer::findClientIndex(int id) {
-    for (size_t i = 0; i < clientList.size(); i++) {
-        if (clientList[i].socket->id == id)
-            return i;
-    }
-    return -1;
-}
-#else
+#ifdef __EMSCRIPTEN__
 size_t GameServer::findClientIndex(int id) {
     for (size_t i = 0; i < clientList.size(); i++) {
         if (clientList[i].socket->id == id)

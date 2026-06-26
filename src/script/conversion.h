@@ -44,10 +44,14 @@ template<> struct Convert<string> {
 template<> struct Convert<lua_CFunction> {
     static int toLua(lua_State* L, lua_CFunction value) { lua_pushcfunction(L, value); return 1; }
 };
+
+
+#ifndef __EMSCRIPTEN__
+
 template<> struct Convert<ecs::Entity> {
     static int toLua(lua_State* L, ecs::Entity value) {
         // EM FIXME
-        //static_assert(sizeof(void*) == sizeof(ecs::Entity));
+        static_assert(sizeof(void*) == sizeof(ecs::Entity));
         union { void* ptr; ecs::Entity e; }u{};
         u.e = value;
         lua_pushlightuserdata(L, u.ptr);
@@ -55,7 +59,7 @@ template<> struct Convert<ecs::Entity> {
     }
     static ecs::Entity fromLua(lua_State* L, int idx) {
         // EM FIXME
-        //static_assert(sizeof(void*) == sizeof(ecs::Entity));
+        static_assert(sizeof(void*) == sizeof(ecs::Entity));
         if (!lua_islightuserdata(L, idx))
             return {};
         union { void* ptr; ecs::Entity e; }u{};
@@ -63,6 +67,59 @@ template<> struct Convert<ecs::Entity> {
         return u.e;
     }
 };
+
+#else
+    struct Fake64bPointer {
+        void* p1;
+        void* p2 = nullptr;
+
+        operator void*() const { return p1; }
+    };
+
+
+    template<> struct Convert<ecs::Entity> {
+        static int toLua(lua_State* L, ecs::Entity value) {
+            // EM FIXME
+            static_assert(sizeof(Fake64bPointer) == sizeof(ecs::Entity));
+            union { Fake64bPointer ptr; ecs::Entity e; }u{};
+            u.e = value;
+            lua_pushlightuserdata(L, u.ptr);
+            return 1;
+        }
+        static ecs::Entity fromLua(lua_State* L, int idx) {
+            // EM FIXME
+            static_assert(sizeof(Fake64bPointer) == sizeof(ecs::Entity));
+            if (!lua_islightuserdata(L, idx))
+                return {};
+            union { Fake64bPointer ptr; ecs::Entity e; }u{};
+            u.ptr = Fake64bPointer{lua_touserdata(L, idx)};
+            return u.e;
+        }
+    };
+
+
+    // SIMPLE ==================================================
+    // template<> struct Convert<ecs::Entity> {
+    //     static int toLua(lua_State* L, ecs::Entity value) {
+    //         // EM FIXME
+    //         //static_assert(sizeof(void*) == sizeof(ecs::Entity));
+    //         union { void* ptr; ecs::Entity e; }u{};
+    //         u.e = value;
+    //         lua_pushlightuserdata(L, u.ptr);
+    //         return 1;
+    //     }
+    //     static ecs::Entity fromLua(lua_State* L, int idx) {
+    //         // EM FIXME
+    //         //static_assert(sizeof(void*) == sizeof(ecs::Entity));
+    //         if (!lua_islightuserdata(L, idx))
+    //             return {};
+    //         union { void* ptr; ecs::Entity e; }u{};
+    //         u.ptr = lua_touserdata(L, idx);
+    //         return u.e;
+    //     }
+    // };
+#endif
+
 
 template<typename T> struct Convert<std::optional<T>> {
     static int toLua(lua_State* L, std::optional<T> value) { if (value.has_value()) return Convert<T>::toLua(L, value.value()); lua_pushnil(L); return 1; }

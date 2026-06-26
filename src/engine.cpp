@@ -280,7 +280,6 @@ static void emscripten_iter_main_loop_headless(void* arg) {
 
 void Engine::runMainLoop()
 {
-        LOG(Info, "runMainLoop");
     if (Window::all_windows.size() == 0)
     {
 #ifdef DEBUG
@@ -289,7 +288,6 @@ void Engine::runMainLoop()
 #endif
 
 #ifdef __EMSCRIPTEN__
-        LOG(Info, "EMSCRIPTEN HEADLESS");
         // pass pointer to this instance (not *this)
         emscripten_set_main_loop_arg(emscripten_iter_main_loop_headless, this, 0, 1);
 #else
@@ -304,7 +302,6 @@ void Engine::runMainLoop()
         debug_output_timer.repeat(5);
 #endif
 #ifdef __EMSCRIPTEN__
-        LOG(Info, "EMSCRIPTEN");
         emscripten_set_main_loop_arg(emscripten_iter_main_loop, this, 0, 1);
 #else
         sp::audio::Source::startAudioSystem();

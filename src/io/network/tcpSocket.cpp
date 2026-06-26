@@ -155,6 +155,7 @@ TcpSocket::~TcpSocket()
 {
     close();
 }
+
 #ifndef __EMSCRIPTEN__
 
 bool TcpSocket::connect(const Address& host, int port)

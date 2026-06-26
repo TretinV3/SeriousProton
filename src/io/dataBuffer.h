@@ -239,6 +239,11 @@ public:
     DataBuffer& operator <<(std::string_view data) { write(data); return *this; }
 
 #ifdef __EMSCRIPTEN__
+    void write(size_t i)
+    {
+        writeVLQu(i);
+    }
+
     // EM FIXME
     DataBuffer& operator <<(size_t data) { write(data); return *this; }
     DataBuffer& operator >>(size_t& data) {
@@ -247,6 +252,7 @@ public:
         data = d;
         return *this;
     }
+
 #endif
 
 
