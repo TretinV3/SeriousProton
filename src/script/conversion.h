@@ -50,7 +50,6 @@ template<> struct Convert<lua_CFunction> {
 
 template<> struct Convert<ecs::Entity> {
     static int toLua(lua_State* L, ecs::Entity value) {
-        // EM FIXME
         static_assert(sizeof(void*) == sizeof(ecs::Entity));
         union { void* ptr; ecs::Entity e; }u{};
         u.e = value;
@@ -58,7 +57,6 @@ template<> struct Convert<ecs::Entity> {
         return 1;
     }
     static ecs::Entity fromLua(lua_State* L, int idx) {
-        // EM FIXME
         static_assert(sizeof(void*) == sizeof(ecs::Entity));
         if (!lua_islightuserdata(L, idx))
             return {};
@@ -69,55 +67,36 @@ template<> struct Convert<ecs::Entity> {
 };
 
 #else
-    struct Fake64bPointer {
-        void* p1;
-        void* p2 = nullptr;
+    /*
+        The previous code is made for 64 bits architectures and is based on undefined behavior.
+        We are here explicitly converting the entity data to a pointer and decreasing the size to fit the 32 bits cap.
+    */
 
-        operator void*() const { return p1; }
+    struct FakeEntity {
+        uint16_t index;
+        uint16_t version;
     };
-
 
     template<> struct Convert<ecs::Entity> {
         static int toLua(lua_State* L, ecs::Entity value) {
-            // EM FIXME
-            static_assert(sizeof(Fake64bPointer) == sizeof(ecs::Entity));
-            union { Fake64bPointer ptr; ecs::Entity e; }u{};
-            u.e = value;
-            lua_pushlightuserdata(L, u.ptr);
+            static_assert(sizeof(void*) == sizeof(FakeEntity));
+            FakeEntity e{static_cast<uint16_t>(value.getIndex()), static_cast<uint16_t>(value.getVersion())};
+            uint32_t as32b = (e.index << 16) + e.version;
+            void* asptr = (void*)as32b;
+            lua_pushlightuserdata(L, asptr);
             return 1;
         }
         static ecs::Entity fromLua(lua_State* L, int idx) {
-            // EM FIXME
-            static_assert(sizeof(Fake64bPointer) == sizeof(ecs::Entity));
+            static_assert(sizeof(void*) == sizeof(FakeEntity));
             if (!lua_islightuserdata(L, idx))
                 return {};
-            union { Fake64bPointer ptr; ecs::Entity e; }u{};
-            u.ptr = Fake64bPointer{lua_touserdata(L, idx)};
-            return u.e;
+            void* asptr = lua_touserdata(L, idx);
+            uint32_t as32b = (uint32_t)asptr;
+            FakeEntity e{static_cast<uint16_t>(as32b >> 16), static_cast<uint16_t>(as32b & 0xFFFF)};
+            ecs::Entity res = ecs::Entity::forced(e.index, e.version);
+            return res;
         }
     };
-
-
-    // SIMPLE ==================================================
-    // template<> struct Convert<ecs::Entity> {
-    //     static int toLua(lua_State* L, ecs::Entity value) {
-    //         // EM FIXME
-    //         //static_assert(sizeof(void*) == sizeof(ecs::Entity));
-    //         union { void* ptr; ecs::Entity e; }u{};
-    //         u.e = value;
-    //         lua_pushlightuserdata(L, u.ptr);
-    //         return 1;
-    //     }
-    //     static ecs::Entity fromLua(lua_State* L, int idx) {
-    //         // EM FIXME
-    //         //static_assert(sizeof(void*) == sizeof(ecs::Entity));
-    //         if (!lua_islightuserdata(L, idx))
-    //             return {};
-    //         union { void* ptr; ecs::Entity e; }u{};
-    //         u.ptr = lua_touserdata(L, idx);
-    //         return u.e;
-    //     }
-    // };
 #endif
 
 
