@@ -25,6 +25,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#include <emscripten/html5.h>
 #endif
 
 
@@ -274,6 +275,24 @@ static void emscripten_iter_main_loop_headless(void* arg) {
         emscripten_cancel_main_loop();
     }
 }
+
+
+static bool emscripten_call_back_resize(int eventType, const EmscriptenUiEvent *uiEvent, void *arg) {
+    Engine* engine = static_cast<Engine*>(arg);
+    LOG(INFO, "resize event");
+
+    auto window = Window::all_windows.at(0);
+    auto id = SDL_GetWindowID(static_cast<SDL_Window*>(window->window));
+
+    SDL_Event test_event;
+    test_event.type = SDL_WINDOWEVENT;
+    test_event.window.windowID = id;
+    test_event.window.type = SDL_WINDOWEVENT_RESIZED;
+
+    engine->handleEvent(test_event);
+
+    return true;
+}
 }
 #endif
 
@@ -288,7 +307,6 @@ void Engine::runMainLoop()
 #endif
 
 #ifdef __EMSCRIPTEN__
-        // pass pointer to this instance (not *this)
         emscripten_set_main_loop_arg(emscripten_iter_main_loop_headless, this, 0, 1);
 #else
         while(running)
@@ -302,6 +320,8 @@ void Engine::runMainLoop()
         debug_output_timer.repeat(5);
 #endif
 #ifdef __EMSCRIPTEN__
+        LOG(INFO, "setup callback");
+        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, false, emscripten_call_back_resize);
         emscripten_set_main_loop_arg(emscripten_iter_main_loop, this, 0, 1);
 #else
         sp::audio::Source::startAudioSystem();

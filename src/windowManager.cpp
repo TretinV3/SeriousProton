@@ -1,7 +1,5 @@
 #include "windowManager.h"
 
-#include "nlohmann/json.hpp"
-
 #ifdef WIN32
 #include "dynamicLibrary.h"
 
@@ -409,6 +407,7 @@ void Window::handleEvent(const SDL_Event& event)
             //close();
             break;
         case SDL_WINDOWEVENT_RESIZED:
+            LOG(INFO, "window resized sdl event");
             setupView();
             break;
         }
@@ -437,6 +436,13 @@ void Window::setupView()
     }
 }
 
+#ifdef __EMSCRIPTEN__
+extern "C" {
+extern void js_get_screen_size(SDL_Rect* rect);
+}
+#endif
+
+
 glm::ivec2 Window::calculateWindowSize() const
 {
     int display_nr = 0;
@@ -453,11 +459,19 @@ glm::ivec2 Window::calculateWindowSize() const
 
 
     SDL_Rect rect{0,0,0,0};
+    #ifndef __EMSCRIPTEN__
     if (SDL_GetDisplayBounds(display_nr, &rect))
     {
         display_nr = 0;
         SDL_GetDisplayBounds(display_nr, &rect);
     }
+#else
+    js_get_screen_size(&rect);
+
+    LOG(INFO, windowWidth, " x ", windowHeight);
+    LOG(INFO, rect.w, " x ", rect.h);
+
+#endif
     if (mode != Mode::Window && rect.w && rect.h)
     {
         return {rect.w, rect.h};
@@ -465,21 +479,28 @@ glm::ivec2 Window::calculateWindowSize() const
 
     int scale = 2;
 
-#ifndef __EMSCRIPTEN__
     while(windowWidth * scale < int(rect.w) && windowHeight * scale < int(rect.h))
         scale += 1;
-#endif
 
     windowWidth *= scale - 1;
     windowHeight *= scale - 1;
 
-#ifndef __EMSCRIPTEN__
     while(windowWidth >= int(rect.w) || windowHeight >= int(rect.h) - 100)
     {
         windowWidth = static_cast<int>(std::floor(windowWidth * 0.9f));
         windowHeight = static_cast<int>(std::floor(windowHeight * 0.9f));
     }
-#endif
 
     return {windowWidth, windowHeight};
 }
+
+// #ifdef __EMSCRIPTEN__
+// #include "emscripten/html5.h"
+//
+// EMSCRIPTEN_EVENT_RESIZE
+// void Window::resize() {
+//     auto size = calculateWindowSize();
+//     SDL_SetWindowSize(static_cast<SDL_Window*>(window), size.x, size.y);
+// }
+//
+// #endif
