@@ -565,14 +565,47 @@ void RenderTarget::drawTriangleStrip(const std::vector<glm::vec2>& points, glm::
         finish();
 
     auto n = vertex_data.size();
-    for(auto& p : points)
+    for (auto& p : points)
         vertex_data.push_back({p, color, atlas_white_pixel});
-    for(unsigned int idx=0; idx<points.size() - 2;idx++)
+    for (size_t idx = 0; idx < points.size() - 2 ;idx++)
     {
         index_data.insert(index_data.end(), {
             uint16_t(n + idx), uint16_t(n + idx + 1), uint16_t(n + idx + 2),
         });
     }
+}
+
+void RenderTarget::drawTexturedTriangleStrip(std::string_view texture, const std::vector<glm::vec2>& points, const std::vector<glm::vec2>& uvs, glm::u8vec4 color)
+{
+    // Require UV count to match points count.
+    if (points.size() < 3 || points.size() != uvs.size()) return;
+
+    // Load texture and flush if necessary.
+    auto info = getTextureInfo(texture);
+    if (info.texture || vertex_data.size() >= std::numeric_limits<uint16_t>::max() - points.size())
+        finish();
+
+    // Map UVs to points, and push vertex data as in drawTriangleStrip.
+    auto n = vertex_data.size();
+    for (size_t i = 0; i < points.size(); i++)
+    {
+        glm::vec2 mapped_uv{
+            info.uv_rect.position.x + info.uv_rect.size.x * uvs[i].x,
+            info.uv_rect.position.y + info.uv_rect.size.y * uvs[i].y
+        };
+        vertex_data.push_back({points[i], color, mapped_uv});
+    }
+
+    // Build triangles as in drawTriangleStrip.
+    for (size_t idx = 0; idx < points.size() - 2; idx++)
+    {
+        index_data.insert(index_data.end(), {
+            uint16_t(n + idx), uint16_t(n + idx + 1), uint16_t(n + idx + 2),
+        });
+    }
+
+    // Flush batch.
+    if (info.texture) finish(info.texture);
 }
 
 void RenderTarget::drawTriangles(const std::vector<glm::vec2>& points, const std::vector<uint16_t>& indices, glm::u8vec4 color)
@@ -608,6 +641,19 @@ void RenderTarget::fillCircle(glm::vec2 center, float radius, glm::u8vec4 color)
     }
 }
 
+void RenderTarget::outlineRect(const sp::Rect& rect, glm::u8vec4 color)
+{
+    std::vector<glm::vec2> points;
+    points.reserve(5);
+    points.emplace_back(rect.position);
+    points.emplace_back(glm::vec2(rect.position.x + rect.size.x, rect.position.y));
+    points.emplace_back(rect.position + rect.size);
+    points.emplace_back(glm::vec2(rect.position.x, rect.position.y + rect.size.y));
+    points.emplace_back(rect.position);
+
+    drawLine(points, color);
+}
+
 void RenderTarget::fillRect(const sp::Rect& rect, glm::u8vec4 color)
 {
     if (vertex_data.size() >= std::numeric_limits<uint16_t>::max() - 4U)
@@ -627,7 +673,6 @@ void RenderTarget::fillRect(const sp::Rect& rect, glm::u8vec4 color)
     vertex_data.push_back({
         {rect.position.x + rect.size.x, rect.position.y + rect.size.y}, color, atlas_white_pixel});
 }
-
 
 void RenderTarget::drawTexturedQuad(std::string_view texture,
     glm::vec2 p0, glm::vec2 p1, glm::vec2 p2, glm::vec2 p3,
@@ -701,10 +746,11 @@ void RenderTarget::drawText(sp::Rect rect, const sp::Font::PreparedFontString& p
             float v0 = uv_rect.position.y;
             float u1 = uv_rect.position.x + uv_rect.size.x;
             float v1 = uv_rect.position.y + uv_rect.size.y;
-            
+
             float left = gd.position.x + glyph.bounds.position.x * size_scale;
             float right = left + glyph.bounds.size.x * size_scale;
-            float top = gd.position.y - glyph.bounds.position.y * size_scale;
+            // Adjust font baseline if set.
+            float top = gd.position.y - glyph.bounds.position.y * size_scale + (prepared.getFont()->getBaselineOffset() * gd.size / 32.0f);
             float bottom = top + glyph.bounds.size.y * size_scale;
 
             if (flags & Font::FlagClip)
@@ -820,10 +866,11 @@ void RenderTarget::drawRotatedText(glm::vec2 center, float rotation, std::string
             float v0 = uv_rect.position.y;
             float u1 = uv_rect.position.x + uv_rect.size.x;
             float v1 = uv_rect.position.y + uv_rect.size.y;
-            
+
             float left = gd.position.x + glyph.bounds.position.x * size_scale;
             float right = left + glyph.bounds.size.x * size_scale;
-            float top = gd.position.y - glyph.bounds.position.y * size_scale;
+            // Adjust font baseline if set.
+            float top = gd.position.y - glyph.bounds.position.y * size_scale + (prepared.getFont()->getBaselineOffset() * gd.size / 32.0f);
             float bottom = top + glyph.bounds.size.y * size_scale;
 
             glm::vec2 p0 = mat * glm::vec2{left, top} + center;

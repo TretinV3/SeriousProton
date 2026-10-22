@@ -86,7 +86,7 @@ else()
     endif()
 endif()
 
-add_subdirectory(libs/Box2D)
+add_subdirectory(libs/box2d)
 add_subdirectory(libs/glad)
 
 # See cmake/GenerateGlDebug.cmake for details.
@@ -153,6 +153,7 @@ set(source_files #All SeriousProton's objects to compile
     src/audio/music.cpp
     src/clipboard.cpp
     src/engine.cpp
+    src/expr/cexpression.cpp
     src/event.cpp
     src/graphics/font.cpp
     src/graphics/freetypefont.cpp
@@ -185,6 +186,8 @@ set(source_files #All SeriousProton's objects to compile
     src/script/component.h
     src/script/callback.h
     src/script/callback.cpp
+    src/script/coroutine.h
+    src/script/coroutine.cpp
     src/shaderManager.cpp
     src/soundManager.cpp
     src/stringImproved.cpp
@@ -214,6 +217,7 @@ set(source_files #All SeriousProton's objects to compile
     src/clipboard.h
     src/dynamicLibrary.h
     src/engine.h
+    src/expr/cexpression.h
     src/event.h
     src/graphics/alignment.h
     src/graphics/font.h
@@ -317,7 +321,7 @@ endif()
 set(OPTIMIZER_FLAGS)
 if(CMAKE_COMPILER_IS_GNUCC)
     # On gcc, we want some general optimalizations that improve speed a lot.
-    set(OPTIMIZER_FLAGS ${OPTIMIZER_FLAGS} -O3 -flto -funsafe-math-optimizations)
+    set(OPTIMIZER_FLAGS ${OPTIMIZER_FLAGS} -O3 -flto=auto -funsafe-math-optimizations)
 
     # If we are compiling for a rasberry pi, we want to aggressively optimize for the CPU we are running on.
     # Note that this check only works if we are compiling directly on the pi, as it is a dirty way of checkif if we are on the pi.
@@ -375,7 +379,7 @@ target_link_libraries(seriousproton_deps
         box2d glad lua ${SDL2_LIBRARIES} glm::glm Threads::Threads ${FREETYPE_LIBRARIES} basisu-transcoder $<BUILD_INTERFACE:steamsdk>
         $<$<BOOL:${WIN32}>:wsock32 ws2_32 crypt32 iphlpapi>
         # LTO flag must be on the linker's list as well.
-        "$<$<AND:$<BOOL:${CMAKE_COMPILER_IS_GNUCC}>,$<OR:$<CONFIG:RelWithDebInfo>,$<CONFIG:Release>>>:-flto>"
+        "$<$<AND:$<BOOL:${CMAKE_COMPILER_IS_GNUCC}>,$<OR:$<CONFIG:RelWithDebInfo>,$<CONFIG:Release>>>:-flto=auto>"
         "$<BUILD_INTERFACE:opus;$<$<NOT:$<BOOL:${ANDROID}>>:${CMAKE_DL_LIBS}>>"
 )
 

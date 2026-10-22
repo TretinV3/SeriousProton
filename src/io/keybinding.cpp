@@ -20,7 +20,7 @@ float Keybinding::deadzone = 0.05f;
 Keybinding::Keybinding(const string& name)
 : name(name), label(name.substr(0, 1).upper() + name.substr(1).lower())
 {
-    value = 0.0;
+    value = 0.0f;
     down_event = false;
     up_event = false;
 
@@ -36,14 +36,18 @@ Keybinding::Keybinding(const string& name)
 Keybinding::Keybinding(const string& name, const string& default_key)
 : Keybinding(name)
 {
+    default_bindings.emplace_back(default_key);
     addKey(default_key);
 }
 
 Keybinding::Keybinding(const string& name, const std::initializer_list<const string>& default_keys)
 : Keybinding(name)
 {
-    for(const string& key : default_keys)
+    for (const string& key : default_keys)
+    {
+        default_bindings.emplace_back(key);
         addKey(key);
+    }
 }
 
 Keybinding::~Keybinding()
@@ -251,6 +255,7 @@ string Keybinding::getHumanReadableKeyName(int index) const
     {
         int key = bindings[index].key;
         int data = key & ~type_mask;
+        string sign = bindings[index].inverted ? "-" : "+";
         switch(key & type_mask)
         {
         case keyboard_mask:
@@ -268,21 +273,21 @@ string Keybinding::getHumanReadableKeyName(int index) const
             }
             break;
         case joystick_axis_mask:
-            return "Axis: " + string(data & 0xff);
+            return "Axis " + string(data & 0xff) + sign;
         case joystick_button_mask:
-            return "Button: " + string(data & 0xff);
+            return "Button " + string(data & 0xff);
         case mouse_movement_mask:
             switch(data)
             {
-            case 0: return "X";
-            case 1: return "Y";
+            case 0: return "Mouse X" + sign;
+            case 1: return "Mouse Y" + sign;
             }
             break;
         case mouse_wheel_mask:
             switch(data)
             {
-            case 0: return "Wheel Sideways";
-            case 1: return "Wheel";
+            case 0: return "Wheel Sideways" + sign;
+            case 1: return "Wheel" + sign;
             }
             break;
         case game_controller_button_mask:
@@ -308,12 +313,12 @@ string Keybinding::getHumanReadableKeyName(int index) const
         case game_controller_axis_mask:
             switch(data & 0xff)
             {
-            case SDL_CONTROLLER_AXIS_LEFTX: return "X Axis";
-            case SDL_CONTROLLER_AXIS_LEFTY: return "Y Axis";
-            case SDL_CONTROLLER_AXIS_RIGHTX: return "X Axis Right";
-            case SDL_CONTROLLER_AXIS_RIGHTY: return "Y Axis Right";
-            case SDL_CONTROLLER_AXIS_TRIGGERLEFT: return "Trigger Axis Left";
-            case SDL_CONTROLLER_AXIS_TRIGGERRIGHT: return "Trigger Axis Right";
+            case SDL_CONTROLLER_AXIS_LEFTX: return "X Axis" + sign;
+            case SDL_CONTROLLER_AXIS_LEFTY: return "Y Axis" + sign;
+            case SDL_CONTROLLER_AXIS_RIGHTX: return "X Axis Right" + sign;
+            case SDL_CONTROLLER_AXIS_RIGHTY: return "Y Axis Right" + sign;
+            case SDL_CONTROLLER_AXIS_TRIGGERLEFT: return "Trigger Axis Left" + sign;
+            case SDL_CONTROLLER_AXIS_TRIGGERRIGHT: return "Trigger Axis Right" + sign;
             }
             break;
         case virtual_mask:
@@ -326,7 +331,7 @@ string Keybinding::getHumanReadableKeyName(int index) const
 
 bool Keybinding::get() const
 {
-    return value > 0.5f || down_event;
+    return value > threshold || down_event;
 }
 
 bool Keybinding::getDown() const
@@ -399,7 +404,7 @@ void Keybinding::loadKeybindings(const string& filename)
         else if (entry["key"].is_array())
         {
             keybinding->clearKeys();
-            for(const auto& key_entry : entry["key"])
+            for (const auto& key_entry : entry["key"])
             {
                 if (key_entry.is_string())
                     keybinding->addKey(key_entry.get<std::string>());
@@ -410,6 +415,7 @@ void Keybinding::loadKeybindings(const string& filename)
             keybinding->bindings.clear();
         }
     }
+    LOG(Info, "Keybindings loaded from ", filename);
 }
 
 void Keybinding::saveKeybindings(const string& filename)
@@ -427,6 +433,7 @@ void Keybinding::saveKeybindings(const string& filename)
 
     std::ofstream file(filename);
     file << obj.dump();
+    LOG(Info, "Keybindings saved to ", filename);
 }
 
 Keybinding* Keybinding::getByName(const string& name)
@@ -482,15 +489,30 @@ void Keybinding::addBinding(int key, bool inverted)
     bindings.push_back({key, inverted});
 }
 
-void Keybinding::setValue(float value)
+void Keybinding::setValue(float new_value, int key_type)
 {
-    if (value < Keybinding::deadzone && value > -Keybinding::deadzone)//Add a tiny dead zone by default. Assists in gamepads that give off "almost zero" in neutral.
-        value = 0.0;
-    if (this->value < 0.5f && value >= 0.5f)
-        down_event = true;
-    if (this->value >= 0.5f && value < 0.5f)
-        up_event = true;
-    this->value = value;
+    // Handle axes that return negative values.
+    float threshold_value = fabs(new_value);
+
+    // Add a deadzone by default to prevent inputs that emit non-zero jitter at
+    // rest from triggering events.
+    if (threshold_value < deadzone)
+    {
+        threshold_value = 0.0f;
+        new_value = 0.0f;
+    }
+
+    // Transition between keydown/up only for buttons and non-movement axes.
+    // Can't avoid game_controller axes because some have axes on buttons and
+    // triggers.
+    if ((key_type & type_mask) != mouse_movement_mask && (key_type & type_mask) != joystick_axis_mask)
+    {
+        if (this->value < threshold && threshold_value >= threshold) down_event = true;
+        if (this->value >= threshold && threshold_value < threshold) up_event = true;
+    }
+
+    // Set the keybind's value to the new value.
+    this->value = new_value;
 }
 
 void Keybinding::postUpdate()
@@ -525,11 +547,18 @@ void Keybinding::handleEvent(const SDL_Event& event)
     switch(event.type)
     {
     case SDL_KEYDOWN:
-        if (!SDL_IsTextInputActive())
+        // Ignore function keys (F1-F24) if SDL text input is active
+        if (!SDL_IsTextInputActive()
+            || (event.key.keysym.sym >= SDLK_F1 && event.key.keysym.sym <= SDLK_F12)
+            || (event.key.keysym.sym >= SDLK_F13 && event.key.keysym.sym <= SDLK_F24)
+        )
             updateKeys(event.key.keysym.sym | keyboard_mask, 1.0);
         break;
     case SDL_KEYUP:
-        if (!SDL_IsTextInputActive())
+        if (!SDL_IsTextInputActive()
+            || (event.key.keysym.sym >= SDLK_F1 && event.key.keysym.sym <= SDLK_F12)
+            || (event.key.keysym.sym >= SDLK_F13 && event.key.keysym.sym <= SDLK_F24)
+        )
             updateKeys(event.key.keysym.sym | keyboard_mask, 0.0);
         break;
     case SDL_MOUSEBUTTONDOWN:
@@ -608,14 +637,22 @@ void Keybinding::handleEvent(const SDL_Event& event)
         //event.tfinger.x, event.tfinger.x
         updateKeys(int(io::Pointer::Button::Touch) | pointer_mask, 0.0);
         break;
+
+    // To avoid competition between SDL_JOY... and SDL_CONTROLLER... events,
+    // skip joystick events for devices that also open as game controllers.
+    // Especially can't treat GC axes like joysticks because GCs report 0 at
+    // rest and joysticks report -1.
     case SDL_JOYBUTTONDOWN:
-        updateKeys(int(event.jbutton.button) | int(event.jbutton.which) << 8 | joystick_button_mask, 1.0);
+        if (!SDL_GameControllerFromInstanceID(event.jbutton.which))
+            updateKeys(static_cast<int>(event.jbutton.button) | static_cast<int>(event.jbutton.which) << 8 | joystick_button_mask, 1.0f);
         break;
     case SDL_JOYBUTTONUP:
-        updateKeys(int(event.jbutton.button) | int(event.jbutton.which) << 8 | joystick_button_mask, 0.0);
+        if (!SDL_GameControllerFromInstanceID(event.jbutton.which))
+            updateKeys(static_cast<int>(event.jbutton.button) | static_cast<int>(event.jbutton.which) << 8 | joystick_button_mask, 0.0f);
         break;
     case SDL_JOYAXISMOTION:
-        updateKeys(int(event.jaxis.axis) | int(event.jaxis.which) << 8 | joystick_axis_mask, float(event.jaxis.value) / 32768.0f);
+        if (!SDL_GameControllerFromInstanceID(event.jaxis.which))
+            updateKeys(static_cast<int>(event.jaxis.axis) | static_cast<int>(event.jaxis.which) << 8 | joystick_axis_mask, static_cast<float>(event.jaxis.value) / 32768.0f);
         break;
     case SDL_JOYDEVICEADDED:
         if (!SDL_IsGameController(event.jdevice.which))
@@ -627,6 +664,7 @@ void Keybinding::handleEvent(const SDL_Event& event)
                 LOG(Warning, "Failed to open joystick...");
         }
         break;
+
     case SDL_JOYDEVICEREMOVED:
         for(int button=0; button<32; button++)
             updateKeys(int(button) | int(event.jdevice.which) << 8 | joystick_button_mask, 0.0);
@@ -671,7 +709,7 @@ void Keybinding::handleEvent(const SDL_Event& event)
             //Focus lost, release all keys.
             for(Keybinding* keybinding = keybindings; keybinding; keybinding=keybinding->next)
                 if (keybinding->bindings.size() > 0)
-                    keybinding->setValue(0.0);
+                    keybinding->setValue(0.0f);
         }
         break;
     default:
@@ -683,7 +721,7 @@ void Keybinding::updateKeys(int key_number, float value)
 {
     if (rebinding_key)
     {
-        if ((value > 0.5f || value < -0.5f) && (key_number & (static_cast<int>(rebinding_type) << 16)))
+        if ((value > threshold || value < -threshold) && (key_number & (static_cast<int>(rebinding_type) << 16)))
         {
             rebinding_key->addBinding(key_number, value < 0.0f);
             rebinding_key = nullptr;
@@ -697,9 +735,9 @@ void Keybinding::updateKeys(int key_number, float value)
             if (bind.key == key_number)
             {
                 if (bind.inverted)
-                    keybinding->setValue(-value);
+                    keybinding->setValue(-value, key_number);
                 else
-                    keybinding->setValue(value);
+                    keybinding->setValue(value, key_number);
             }
         }
     }

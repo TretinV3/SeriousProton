@@ -18,6 +18,7 @@ public:
 
     glm::vec2 getVirtualSize() const { return current_virtual_size; }
     void render();
+    void swapBuffers();
 
     Mode getMode() { return mode; }
     void setMode(Mode mode);
@@ -25,6 +26,7 @@ public:
     void setFSAA(int fsaa);
 
     void setTitle(string title);
+    void setIcon(string icon_name);
 
     glm::vec2 mapPixelToCoords(glm::ivec2 point) const;
     glm::ivec2 mapCoordsToPixel(glm::vec2 point) const;

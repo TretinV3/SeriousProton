@@ -1,6 +1,6 @@
 #include "windowManager.h"
 
-#ifdef WIN32
+#ifdef _WIN32
 #include "dynamicLibrary.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -8,6 +8,8 @@
 #endif
 
 #include "graphics/opengl.h"
+#include "graphics/image.h"
+#include "resources.h"
 #include "Updatable.h"
 #include "Renderable.h"
 #include "postProcessManager.h"
@@ -48,8 +50,23 @@ Window::Window(glm::vec2 virtual_size, Mode mode, RenderChain* render_chain, int
 #endif
 
     create();
-
     sp::initOpenGL();
+
+    // Enable multisampling after OpenGL is initialized.
+    switch (fsaa)
+    {
+    case 0:
+        // Expected input for no FSAA.
+        break;
+    case 2:
+    case 4:
+    case 8:
+        // Expected inputs for FSAA.
+        glEnable(GL_MULTISAMPLE);
+        break;
+    default:
+        LOG(Warning, "FSAA must be off (0), 2x, 4x, or 8x, but ", fsaa , "x was passed and ignored.");
+    }
 
     all_windows.push_back(this);
 }
@@ -81,8 +98,11 @@ void Window::render()
     sp::RenderTarget target{current_virtual_size, {w, h}};
     render_chain->render(target);
     target.finish();
+}
 
-    // Display things on screen
+void Window::swapBuffers()
+{
+    SDL_GL_MakeCurrent(static_cast<SDL_Window*>(window), gl_context);
     SDL_GL_SwapWindow(static_cast<SDL_Window*>(window));
 }
 
@@ -111,15 +131,59 @@ void Window::setMode(Mode new_mode)
 
 void Window::setFSAA(int new_fsaa)
 {
-    if (fsaa == new_fsaa)
-        return;
-    fsaa = new_fsaa;
-    create();
+    if (fsaa == new_fsaa) return;
+
+    switch (new_fsaa)
+    {
+        case 0:
+        case 2:
+        case 4:
+        case 8:
+            fsaa = new_fsaa;
+            break;
+        default:
+            LOG(Warning, "FSAA must be off (0), 2x, 4x, or 8x, but ", new_fsaa , "x was passed. Treating as fsaa=0.");
+            if (fsaa == 0) return;
+            fsaa = 0;
+    }
+
+    // Can't apply this without recreating the OpenGL context.
+    // Log that a restart is required.
+    LOG(Warning, "FSAA changed to ", fsaa, "x. Restart required for this change to take effect.");
 }
 
 void Window::setTitle(string title)
 {
     SDL_SetWindowTitle(static_cast<SDL_Window*>(window), title.c_str());
+}
+
+void Window::setIcon(string icon_name)
+{
+    sp::Image image;
+    if (!image.loadFromStream(getResourceStream(icon_name)))
+    {
+        LOG(Warning, "Couldn't load application icon ", icon_name);
+        return;
+    }
+
+    auto size = image.getSize();
+    SDL_Surface* icon_surface = SDL_CreateRGBSurfaceWithFormatFrom(
+        image.getPtr(),
+        size.x, size.y,
+        32,
+        size.x * 4,
+        SDL_PIXELFORMAT_RGBA32
+    );
+
+    if (!icon_surface)
+    {
+        LOG(Warning, "Couldn't create SDL surface for application icon ", icon_name, ". SDL_Error: ", SDL_GetError());
+        return;
+    }
+
+    // Set the window icon, then free the surface.
+    SDL_SetWindowIcon(static_cast<SDL_Window*>(window), icon_surface);
+    SDL_FreeSurface(icon_surface);
 }
 
 glm::vec2 Window::mapPixelToCoords(const glm::ivec2 point) const
@@ -182,6 +246,27 @@ void Window::create()
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
+    // Configure multisampling for FSAA.
+    switch (fsaa)
+    {
+    case 0:
+        // Expected value for no FSAA.
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+        break;
+    case 2:
+    case 4:
+    case 8:
+        // Expected value for FSAA.
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, fsaa);
+        break;
+    default:
+        LOG(Warning, "FSAA must be off (0), 2x, 4x, or 8x, but ", fsaa , "x was passed. Treating as fsaa=0.");
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+    }
+
     int flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
     switch(mode)
     {
@@ -194,14 +279,11 @@ void Window::create()
         flags |= SDL_WINDOW_FULLSCREEN;
         break;
     }
-
     window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED_DISPLAY(display_nr), SDL_WINDOWPOS_CENTERED_DISPLAY(display_nr), size.x, size.y, flags);
-
     if (!window) {
         LOG(Error, "Failed to create SDL2 window:", SDL_GetError());
         exit(1);
     }
-
     if (!gl_context) {
         gl_context = SDL_GL_CreateContext(static_cast<SDL_Window*>(window));
         if (!gl_context) {
@@ -219,11 +301,26 @@ void Window::create()
             exit(1);
         }
     }
-
+    SDL_GL_MakeCurrent(static_cast<SDL_Window*>(window), gl_context);
     if (SDL_GL_SetSwapInterval(-1))
         SDL_GL_SetSwapInterval(1);
-    setupView();
 
+    // Log FSAA status.
+    if (fsaa > 0)
+    {
+        int actual_buffers, actual_samples;
+        SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &actual_buffers);
+        SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &actual_samples);
+
+        if (actual_buffers == 0 || actual_samples == 0)
+            LOG(Warning, "FSAA ", fsaa, "x requested but not available on this system.");
+        else if (actual_samples != fsaa)
+            LOG(Warning, "FSAA ", fsaa, "x requested, but ", actual_samples, "x provided.");
+        else
+            LOG(Info, "FSAA ", fsaa, "x enabled.");
+    }
+
+    setupView();
 }
 
 void Window::handleEvent(const SDL_Event& event)
@@ -252,11 +349,9 @@ void Window::handleEvent(const SDL_Event& event)
         break;
     case SDL_MOUSEBUTTONUP:
         mouse_button_down_mask &=~(1 << int(event.button.button));
+        render_chain->onPointerUp(mapPixelToCoords({event.button.x, event.button.y}), sp::io::Pointer::mouse);
         if (!mouse_button_down_mask)
-        {
-            render_chain->onPointerUp(mapPixelToCoords({event.button.x, event.button.y}), sp::io::Pointer::mouse);
             render_chain->onPointerMove(mapPixelToCoords({event.button.x, event.button.y}), sp::io::Pointer::mouse);
-        }
         break;
     case SDL_MOUSEWHEEL:
         render_chain->onMouseWheelScroll(mapPixelToCoords({event.wheel.mouseX, event.wheel.mouseY}), event.wheel.preciseY);
@@ -403,11 +498,19 @@ void Window::handleEvent(const SDL_Event& event)
                 render_chain->onPointerLeave(-1);
             }
             break;
+        case SDL_WINDOWEVENT_FOCUS_LOST:
+            if (mouse_button_down_mask)
+            {
+                mouse_button_down_mask = 0;
+                int mx, my;
+                SDL_GetMouseState(&mx, &my);
+                render_chain->onPointerUp(mapPixelToCoords({mx, my}), sp::io::Pointer::mouse);
+            }
+            break;
         case SDL_WINDOWEVENT_CLOSE:
             //close();
             break;
         case SDL_WINDOWEVENT_RESIZED:
-            LOG(INFO, "window resized sdl event");
             setupView();
             break;
         }
@@ -446,61 +549,94 @@ extern void js_get_screen_size(SDL_Rect* rect);
 glm::ivec2 Window::calculateWindowSize() const
 {
     int display_nr = 0;
-    for(auto w : all_windows)
+
+    for (auto w : all_windows)
     {
-        if (w == this)
-            break;
-        display_nr ++;
+        if (w == this) break;
+        display_nr++;
     }
 
     // Create the window of the application
     auto windowWidth = static_cast<int>(minimal_virtual_size.x);
     auto windowHeight = static_cast<int>(minimal_virtual_size.y);
 
+    SDL_Rect rect{0, 0, 0, 0};
+    const glm::ivec2 fallback_dimensions{640, 480};
+    const int fallback_size = 240;
+    const int display_bounds = SDL_GetDisplayBounds(display_nr, &rect);
 
-    SDL_Rect rect{0,0,0,0};
-    #ifndef __EMSCRIPTEN__
-    if (SDL_GetDisplayBounds(display_nr, &rect))
+    // Return SDL_Error if SDL_GetDisplayBounds fails
+    if (display_bounds >= 0)
     {
+        if (rect.w == 0 || rect.h == 0)
+            LOG(Debug, "SDL_GetDisplayBounds(display_nr, &rect) succeeded, but at least one rect dimension is still 0. display_nr: ", display_nr, ", rect.w,h: ", rect.w, ",", rect.h);
+
         display_nr = 0;
-        SDL_GetDisplayBounds(display_nr, &rect);
+        const int display_zero_bounds = SDL_GetDisplayBounds(display_nr, &rect);
+
+        if (display_zero_bounds >= 0)
+        {
+            if (rect.w == 0 || rect.h == 0)
+                LOG(Debug, "SDL_GetDisplayBounds(0, &rect) succeeded, but at least one rect dimension is still 0. rect.w,h: ", rect.w, ",", rect.h);
+        }
+        else
+        {
+            const char* sdl_error{SDL_GetError()};
+            LOG(Error, "SDL error in Window::calculateWindowSize() at SDL_GetDisplayBounds(0, &rect): ", sdl_error);
+            SDL_ClearError();
+        }
     }
-#else
-    js_get_screen_size(&rect);
-
-    LOG(INFO, windowWidth, " x ", windowHeight);
-    LOG(INFO, rect.w, " x ", rect.h);
-
-#endif
-    if (mode != Mode::Window && rect.w && rect.h)
+    else
     {
-        return {rect.w, rect.h};
+        LOG(Debug, "SDL_GetDisplayBounds(display_nr, &rect) returned ", display_bounds, ". display_nr: ", display_nr);
+        const char* sdl_error{SDL_GetError()};
+        LOG(Error, "SDL error in Window::calculateWindowSize() at SDL_GetDisplayBounds(display_nr, &rect): ", sdl_error);
+        SDL_ClearError();
+    }
+
+    // Warn if the rect is too small to use
+    if (rect.w < fallback_size || rect.h < fallback_size) LOG(Warning, "SDL_GetDisplayBounds() returned a rect with at least one dimension < ", fallback_size, ": ", rect.w, ",", rect.h);
+
+    if (mode != Mode::Window)
+    {
+        if (rect.w >= fallback_size && rect.h >= fallback_size)
+            return {rect.w, rect.h};
+        else
+        {
+            LOG(Debug, "Calculated window size has at least one dimension of < ", fallback_size, ": ", rect.w, ",", rect.h, "\nFalling back to ", fallback_dimensions.x, ",", fallback_dimensions.y, ".");
+            return fallback_dimensions;
+        }
     }
 
     int scale = 2;
-
-    while(windowWidth * scale < int(rect.w) && windowHeight * scale < int(rect.h))
-        scale += 1;
+    int count = 0;
+    int max_attempts = 128;
+    while ((windowWidth * scale < int(rect.w) && windowHeight * scale < int(rect.h)) && count < max_attempts)
+    {
+        count++;
+        scale++;
+    }
+    if (count >= max_attempts) LOG(Warning, "Window::calculateWindowSize() couldn't solve scale in ", max_attempts, "attempts: ", scale);
 
     windowWidth *= scale - 1;
     windowHeight *= scale - 1;
+    LOG(Debug, "Window dimensions before scaling loop: ", windowWidth, ",", windowHeight);
 
-    while(windowWidth >= int(rect.w) || windowHeight >= int(rect.h) - 100)
+    count = 0;
+    max_attempts = 16;
+    while ((windowWidth >= int(rect.w) || windowHeight >= int(rect.h) - 100) && count < max_attempts)
     {
+        count++;
         windowWidth = static_cast<int>(std::floor(windowWidth * 0.9f));
         windowHeight = static_cast<int>(std::floor(windowHeight * 0.9f));
+    }
+    if (count >= max_attempts) LOG(Warning, "Window::calculateWindowSize() couldn't solve windowWidth and windowHeight in ", max_attempts, " attempts: ", windowWidth, ",", windowHeight);
+
+    if (windowWidth < fallback_size || windowHeight < fallback_size)
+    {
+        LOG(Debug, "Window::calculateWindowSize() reported at least one window dimension of < ", fallback_size, ": ", windowWidth, ",", windowHeight, "\nFalling back to ", fallback_dimensions.x, ",", fallback_dimensions.y, ".");
+        return fallback_dimensions;
     }
 
     return {windowWidth, windowHeight};
 }
-
-// #ifdef __EMSCRIPTEN__
-// #include "emscripten/html5.h"
-//
-// EMSCRIPTEN_EVENT_RESIZE
-// void Window::resize() {
-//     auto size = calculateWindowSize();
-//     SDL_SetWindowSize(static_cast<SDL_Window*>(window), size.x, size.y);
-// }
-//
-// #endif

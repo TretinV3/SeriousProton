@@ -123,7 +123,12 @@ Engine::Engine()
     SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 #endif
-    SDL_Init(SDL_INIT_EVERYTHING);
+    if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
+    {
+        const char* sdl_error{SDL_GetError()};
+        LOG(Error, "SDL error in Engine initialization: ", sdl_error);
+        SDL_ClearError();
+    }
     SDL_ShowCursor(false);
     SDL_StopTextInput();
 
@@ -239,18 +244,22 @@ bool Engine::iterMainLoop() {
     engine_timing["collision"] = engine_timing_stopwatch.restart();
     soundManager->updateTick();
 #ifdef STEAMSDK
-    SteamAPI_RunCallbacks();
+            SteamAPI_RunCallbacks();
 #endif
 
-    // Clear the window
-    for(auto window : Window::all_windows)
-        window->render();
-    engine_timing["rendering"] = engine_timing_stopwatch.restart();
-    engine_timing["server_update"] = 0.0f;
-    if (game_server)
-        engine_timing["server_update"] = game_server->getUpdateTime();
+            // Clear the window
+            for(auto window : Window::all_windows)
+                window->render();
+            engine_timing["rendering"] = engine_timing_stopwatch.restart();
+            for (auto window : Window::all_windows)
+                window->swapBuffers();
+            engine_timing_stopwatch.restart(); // skip vsync interval in timing
 
-    last_engine_timing = engine_timing;
+            engine_timing["server_update"] = 0.0f;
+            if (game_server)
+                engine_timing["server_update"] = game_server->getUpdateTime();
+            
+            last_engine_timing = engine_timing;
 
     sp::io::Keybinding::allPostUpdate();
 
@@ -381,7 +390,7 @@ void Engine::handleEvent(SDL_Event& event)
         // EM FIXME
         // if (!audio_started)
         // {
-        //     //audio::AudioSource::startAudioSystem();
+        //     //sp::audio::AudioSource::startAudioSystem();
         //     audio_started = true;
         // }
 #endif
@@ -397,7 +406,7 @@ void Engine::handleEvent(SDL_Event& event)
         if (!audio_started)
         {
             SDL_InitSubSystem(SDL_INIT_AUDIO);
-            sp::audio::Source::startAudioSystem();
+            sp::audio::AudioSource::startAudioSystem();
             audio_started = true;
         }
 #endif
