@@ -511,6 +511,7 @@ void Window::handleEvent(const SDL_Event& event)
             //close();
             break;
         case SDL_WINDOWEVENT_RESIZED:
+            LOG(INFO, "SDL_WINDOWEVENT_RESIZED");
             setupView();
             break;
         }
@@ -523,10 +524,20 @@ void Window::handleEvent(const SDL_Event& event)
     }
 }
 
+#ifdef __EMSCRIPTEN__
+extern "C" {
+extern void js_get_screen_size(int* w, int* h);
+}
+#endif
+
+
 void Window::setupView()
 {
     int w, h;
     SDL_GetWindowSize(static_cast<SDL_Window*>(window), &w, &h);
+#ifdef __EMSCRIPTEN__
+    js_get_screen_size(&w, &h);
+#endif
     glm::vec2 window_size{w, h};
 
     current_virtual_size = minimal_virtual_size;
@@ -537,14 +548,11 @@ void Window::setupView()
     }else{
         current_virtual_size.y = current_virtual_size.x / window_size.x * window_size.y;
     }
-}
 
 #ifdef __EMSCRIPTEN__
-extern "C" {
-extern void js_get_screen_size(SDL_Rect* rect);
-}
+    SDL_SetWindowSize(static_cast<SDL_Window*>(window), (int)window_size.x, (int) window_size.y);
 #endif
-
+}
 
 glm::ivec2 Window::calculateWindowSize() const
 {

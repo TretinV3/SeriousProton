@@ -406,7 +406,7 @@ void Engine::handleEvent(SDL_Event& event)
         if (!audio_started)
         {
             SDL_InitSubSystem(SDL_INIT_AUDIO);
-            sp::audio::AudioSource::startAudioSystem();
+            sp::audio::Source::startAudioSystem();
             audio_started = true;
         }
 #endif

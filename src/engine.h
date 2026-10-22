@@ -4,6 +4,7 @@
 #include "stringImproved.h"
 #include "ecs/system.h"
 #include "P.h"
+#include "timer.h"
 
 #ifdef WIN32
 #include "dynamicLibrary.h"
@@ -27,6 +28,8 @@ private:
     float gameSpeed;
 
     EngineTiming last_engine_timing;
+    sp::SystemStopwatch frame_timer;
+
 #ifdef WIN32
     std::unique_ptr<DynamicLibrary> exchndl;
 #endif
