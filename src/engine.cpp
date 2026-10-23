@@ -386,14 +386,6 @@ void Engine::handleEvent(SDL_Event& event)
     switch(event.type)
     {
     case SDL_KEYDOWN:
-#ifdef __EMSCRIPTEN__
-        // EM FIXME
-        // if (!audio_started)
-        // {
-        //     //sp::audio::AudioSource::startAudioSystem();
-        //     audio_started = true;
-        // }
-#endif
     case SDL_KEYUP:
         window_id = event.key.windowID;
         break;
@@ -402,7 +394,6 @@ void Engine::handleEvent(SDL_Event& event)
         break;
     case SDL_MOUSEBUTTONDOWN:
 #ifdef __EMSCRIPTEN__
-        // EM FIXME
         if (!audio_started)
         {
             SDL_InitSubSystem(SDL_INIT_AUDIO);
