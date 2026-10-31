@@ -455,7 +455,17 @@ Engine::EngineTiming Engine::getEngineTiming()
     return last_engine_timing;
 }
 
+
+#ifdef __EMSCRIPTEN__
+extern "C" {
+extern void js_on_shutdown();
+}
+#endif
+
 void Engine::shutdown()
 {
     running = false;
+#ifdef __EMSCRIPTEN__
+    js_on_shutdown();
+#endif
 }
