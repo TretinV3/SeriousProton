@@ -48,6 +48,8 @@ GameServer::GameServer(string server_name, int version_number, int listen_port)
     }
     listen_socket.setBlocking(false);
     new_socket = std::make_unique<sp::io::network::TcpSocket>();
+
+#ifndef __EMSCRIPTEN__
     if (!broadcast_listen_socket.bind(static_cast<uint16_t>(listen_port)))
     {
         LOG(ERROR) << "Failed to listen on UDP port: " << listen_port;
@@ -57,6 +59,7 @@ GameServer::GameServer(string server_name, int version_number, int listen_port)
         LOG(Error, "Failed to join multicast group for local server discovery");
     }
     broadcast_listen_socket.setBlocking(false);
+#endif
 #ifdef STEAMSDK
     if (!listen_steam.listen())
     {
@@ -250,7 +253,9 @@ void GameServer::update(float /*gameDelta*/)
         objectMap.erase(delList[n]);
     }
 
+#ifndef __EMSCRIPTEN__
     handleBroadcastUDPSocket(delta);
+#endif
 
     if (listen_socket.accept(*new_socket))
     {

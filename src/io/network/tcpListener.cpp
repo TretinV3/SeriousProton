@@ -127,13 +127,13 @@ bool TcpListener::accept(TcpSocket& socket)
 #else
 
 extern "C" {
-extern bool js_websocket_listen();
+extern bool js_websocket_listen(int port);
 extern void js_websocket_close();
 }
 
 bool TcpListener::listen(int port)
 {
-    return js_websocket_listen();
+    return js_websocket_listen(port);
 }
 
 void TcpListener::close()
