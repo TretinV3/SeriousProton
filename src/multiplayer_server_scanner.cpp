@@ -10,12 +10,17 @@ ServerScanner::ServerScanner(int version_number, int server_port)
 ServerScanner::~ServerScanner()
 {
     destroy();
+#ifndef __EMSCRIPTEN__
     if (master_server_scan_thread.joinable())
         master_server_scan_thread.join();
+#endif
 }
 
 void ServerScanner::scanMasterServer(string url)
 {
+#ifdef __EMSCRIPTEN__
+    return;
+#endif
     abort_wait.notify_all();
     if (master_server_scan_thread.joinable())
         return;
